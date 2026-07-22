@@ -151,6 +151,30 @@ else
     fi
     echo "  features: ${FEATURES[*]}"
 
+    # === conflicts 检查 ===
+    CONFLICTS_YAML=$(python3 - "$MANIFEST" <<'PYEOF'
+import sys, yaml, json
+m = yaml.safe_load(open(sys.argv[1]))
+feats = m.get("features")
+if not isinstance(feats, dict) or not feats:
+    print("{}"); sys.exit(0)
+conflicts = {k: v.get("conflicts", []) or [] for k, v in feats.items() if v.get("conflicts")}
+print(json.dumps(conflicts))
+PYEOF
+    )
+    if [ "$CONFLICTS_YAML" != "{}" ]; then
+        CONFLICT_CHECK=$(python3 - "$CONFLICTS_YAML" "${FEATURES[*]}" <<'PYEOF'
+import sys, json
+conflicts = json.loads(sys.argv[1])
+selected = sys.argv[2].split()
+for f in selected:
+    for c in conflicts.get(f, []):
+        if c in selected:
+            print(f"冲突: {f} 和 {c} 不能同时激活，请用 --features 选择其一"); sys.exit(1)
+PYEOF
+        ) || { echo "  ✗ $CONFLICT_CHECK" >&2; exit 1; }
+    fi
+
     total=0; { echo "# Buildroot series"; echo ""; } > "$TMP_SERIES"
     for feat in "${FEATURES[@]}"; do
         for pf in $(ls "$VERSION_DIR/$feat"/*.patch 2>/dev/null | sort); do
