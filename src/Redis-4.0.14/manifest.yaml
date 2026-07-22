@@ -1,6 +1,8 @@
 ﻿# Redis 4.0.14 Kunpeng BoostKit
 # =============================
 #
+# 使用: bash tools/apply_patch.sh src/Redis-4.0.14 /tmp/build
+#
 # Patch:
 #   kbaio/  — io_uring 异步 I/O 内核模块
 

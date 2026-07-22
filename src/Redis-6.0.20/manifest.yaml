@@ -1,6 +1,8 @@
 ﻿# Redis 6.0.20 Kunpeng BoostKit
 # =============================
 #
+# 使用: bash tools/apply_patch.sh src/Redis-6.0.20 /tmp/build
+#
 # Patch:
 #   kunpeng-hw-accel/  — ARM io_uring 硬件加速
 #   kbaio/             — io_uring 异步 I/O 内核模块
