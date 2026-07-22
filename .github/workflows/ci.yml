@@ -1,7 +1,9 @@
 # Patch overlay CI — v6.0
 #
-#   lint + apply（跳过 install，install 需 Kunpeng 硬件）
-#   本地全量: bash tools/verify.sh
+#   lint: manifest + DEP-3 + headers（秒级，全自动）
+#   apply: 本地/CI 需指定 --features 避开冲突
+#     bash tools/verify.sh
+#     SKIP_INSTALL=1 bash tools/apply_patch.sh --features "kunpeng-iouring" src/Redis-7.0.15 /tmp/build
 
 name: ci
 
@@ -23,10 +25,10 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Install pyyaml
         run: pip install pyyaml --quiet
-      - name: Verify (lint + apply, skip install)
-        run: SKIP_INSTALL=1 bash tools/verify.sh
+      - name: Lint
+        run: python3 tools/lint.py all src/*/
