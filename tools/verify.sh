@@ -78,13 +78,43 @@ PYEOF
     echo "  ✓ $vname: $REPO @ $VERSION"
     vcount=$((vcount+1))
 
+    # 读取 conflicts 以便逐个 feature apply
+    CONFLICTS=$(python3 - "$manifest" <<'PYEOF'
+import sys, yaml, json
+m = yaml.safe_load(open(sys.argv[1]))
+feats = m.get("features") or {}
+c = []
+for f, v in feats.items():
+    for cf in (v.get("conflicts") or []):
+        c.append([f, cf])
+print(json.dumps(c))
+PYEOF
+    )
+
     WORK=$(mktemp -d)
-    if bash "$ROOT/tools/apply_patch.sh" "$vdir" "$WORK" 2>&1 | sed 's/^/    /'; then
-        :
+    HAS_CONFLICTS=$(echo "$CONFLICTS" | python3 -c "import json,sys; sys.exit(0 if json.loads(sys.stdin.read()) else 1)" 2>/dev/null && echo true || echo false)
+
+    if $HAS_CONFLICTS; then
+        # 有冲突：逐个 feature 单独 apply
+        for feat_dir in "$vdir"*/; do
+            feat=$(basename "$feat_dir")
+            [[ "$feat" == .* ]] && continue
+            compgen -G "$feat_dir*.patch" > /dev/null 2>&1 || continue
+            echo "    → 单独 apply: $feat"
+            SKIP_INSTALL=1 bash "$ROOT/tools/apply_patch.sh" \
+                --features "$feat" "$vdir" "$WORK" 2>&1 | sed 's/^/      /' || {
+                echo "    ✗ $feat apply 失败"
+                errs=$((errs+1))
+            }
+            rm -rf "$WORK/upstream"
+        done
     else
-        rc=$?
-        echo "  ✗ $vname: apply_patch.sh 退出 (rc=$rc)"
-        errs=$((errs+1))
+        # 无冲突：全量 apply
+        SKIP_INSTALL=1 bash "$ROOT/tools/apply_patch.sh" "$vdir" "$WORK" 2>&1 | sed 's/^/    /' || {
+            rc=$?
+            echo "  ✗ $vname: apply_patch.sh 退出 (rc=$rc)"
+            errs=$((errs+1))
+        }
     fi
     rm -rf "$WORK"
 done
