@@ -1,7 +1,7 @@
 # Patch overlay CI — v6.0
 #
-# 流程:
-#   tools/verify.sh  — lint (manifest + DEP-3 + headers) → clean apply
+#   tools/lint.py all — manifest + DEP-3 + headers（秒级）
+#   apply 验证在本地 / Kunpeng runner 上跑: bash tools/verify.sh
 
 name: ci
 
@@ -23,15 +23,10 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+      - uses: actions/checkout@v4
       - name: Install pyyaml
         run: pip install pyyaml --quiet
-
-      - name: Verify (lint + apply)
-        run: bash tools/verify.sh
+      - name: Lint
+        run: python3 tools/lint.py all src/*/
