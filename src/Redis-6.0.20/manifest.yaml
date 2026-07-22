@@ -3,13 +3,21 @@
 #
 # 使用: bash tools/apply_patch.sh src/Redis-6.0.20 /tmp/build
 #
-# Patch:
+# Patch（同名序号 = 互斥，不能同时选）:
 #   kunpeng-hw-accel/  — ARM io_uring 硬件加速
 #   kbaio/             — io_uring 异步 I/O 内核模块
 
 repo: https://github.com/redis/redis
 version: 6.0.20
 commit: de0d9632b52849d9b7ea52408b1d681d771c5b46
+
+features:
+  kunpeng-hw-accel:
+    depends: []
+    conflicts: [kbaio]
+  kbaio:
+    depends: []
+    conflicts: [kunpeng-hw-accel]
 
 install:
   configure: make distclean
