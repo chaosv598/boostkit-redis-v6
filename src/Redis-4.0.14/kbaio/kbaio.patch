@@ -1,0 +1,599 @@
+From: twwang <920347125@qq.com>
+Subject: [PATCH] redis-4.0.14-kbaio
+
+Description: Kunpeng BoostKit io_uring async I/O kernel module for Redis 4.0.14
+Origin: https://gitcode.com/boostkit/Redis
+Upstream-Status: Inappropriate
+Whitelist-Reason: Kunpeng ARM specific enhancement, not applicable to upstream Redis which targets x86
+Applies-To: redis-4.0.14
+Maintainer: twwang@boostkit
+Last-Update: 2025-11-20
+Signed-off-by: twwang <920347125@qq.com>
+
+diff --git a/kbaio-src/build.sh b/kbaio-src/build.sh
+new file mode 100644
+index 00000000..d4d5aa75
+--- /dev/null
++++ b/kbaio-src/build.sh
+@@ -0,0 +1,2 @@
++gcc -fPIC -shared -o libkbaio.so ae_kbaio.c networking_kbaio.c \
++	-L./ -luring -I./ -I../redis-4.0.14/deps/lua/src -I../redis-4.0.14/src/
+diff --git a/kbaio-src/include/ae_kbaio.h b/kbaio-src/include/ae_kbaio.h
+new file mode 100644
+index 00000000..f8e66687
+--- /dev/null
++++ b/kbaio-src/include/ae_kbaio.h
+@@ -0,0 +1,23 @@
++/*
++ * Copyright (c) Huawei Technilogies Co., Ltd. 2025-2025. All rights reserved.
++ */
++#ifndef AE_KBAIO_H
++#define AE_KBAIO_H
++
++int aeApiCreate(aeEventLoop *eventLoop);
++
++int aeApiResize(aeEventLoop *eventLoop, int setsize);
++
++void aeApiFree(aeEventLoop *eventLoop);
++
++int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask, struct iovec *iovecs);
++
++void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask);
++
++int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp);
++
++void aeApiRegisterFile(aeEventLoop *eventLoop, int fd);
++
++char *aeApiName();
++
++#endif
+diff --git a/kbaio-src/include/networking_kbaio.h b/kbaio-src/include/networking_kbaio.h
+new file mode 100644
+index 00000000..97ed3bd3
+--- /dev/null
++++ b/kbaio-src/include/networking_kbaio.h
+@@ -0,0 +1,12 @@
++/*
++ * Copyright (c) Huawei Technilogies Co., Ltd. 2025-2025. All rights reserved.
++ */
++#ifndef NETWORKING_KBAIO_H_
++#define NETWORKING_KBAIO_H_
++#include "server.h"
++
++void setCreateReadEventKbaio(int fd, void *private, aeFileProc *proc);
++void readDoneFromClientKbaio(aeEventLoop *el, int fd, void *privdata, int mask);
++void writeDoneToClientKbaio(aeEventLoop *el, int fd, void *privdata, int mask);
++void writeToClientKbaio(client *c, int fd);
++#endif
+diff --git a/kbaio-src/src/ae_kbaio.c b/kbaio-src/src/ae_kbaio.c
+new file mode 100644
+index 00000000..f7657528
+--- /dev/null
++++ b/kbaio-src/src/ae_kbaio.c
+@@ -0,0 +1,322 @@
++/* Linux epoll(2) based ae.c module
++ *
++ * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ *   * Redistributions of source code must retain the above copyright notice,
++ *     this list of conditions and the following disclaimer.
++ *   * Redistributions in binary form must reproduce the above copyright
++ *     notice, this list of conditions and the following disclaimer in the
++ *     documentation and/or other materials provided with the distribution.
++ *   * Neither the name of Redis nor the names of its contributors may be used
++ *     to endorse or promote products derived from this software without
++ *     specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++
++#include <sys/epoll.h> // used for define EPOLLIN and EPOLLOUT
++#include <string.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <stddef.h>
++#include "common.h"
++#include "zmalloc.h"
++#include "liburing.h"
++#include "ae_kbaio.h"
++
++#define BACKLOG 8192
++#define MAX_ENTRIES 16384 /* entries should be configured by users */
++#define AE_POLLABLE 8
++
++static int enable_register_files = 1;
++struct io_uring_cqe *cqes[BACKLOG];
++
++typedef struct kbaio_event {
++    int fd;
++    int type;
++} kbaio_event;
++
++typedef struct aeApiState {
++    int ring_fd;
++    struct io_uring *uring;
++    struct kbaio_event *events;
++} aeApiState;
++
++int aeApiCreate(aeEventLoop *eventLoop) {
++    int ret;
++    struct io_uring_params params;
++    aeApiState *state = zmalloc(sizeof(aeApiState));
++    if (!state) return -1;
++    state->events = zmalloc(sizeof(struct kbaio_event)*eventLoop->setsize);
++    if (!state->events) {
++        zfree(state);
++        return -1;
++    }
++
++    state->uring = zmalloc(sizeof(struct io_uring));
++    if (!state->uring) {
++        zfree(state->events);
++        zfree(state);
++        return -1;
++    }
++    __asm__ volatile (
++        "mov x0, %[params]\n\t"
++        "mov x2, %[size_params]\n\t"
++        "mov w1, 0\n\t"
++        "bl memset\n\t"
++        "str x0, [sp, #0x30]\n"
++
++        "add x0, %[eventLoop], #%[kbaio_offset]\n\t"
++        "ldr x0, [x0]\n\t"
++        "cbz x0, 4f\n\t"
++        "add x1, x0, #%[sqpoll_offset]\n\t"
++        "ldr w1, [x1]\n\t"
++        "cbz w1, 4f\n\t"
++
++        "add x13, sp, #0x30\n\t"
++        "mov x0, %[params]\n\t"
++        "add x2, x0, #%[flags_offset]\n\t"
++        "ldr w1, [x2]\n\t"
++        "orr w1, w1, #%[SQPOLL]\n\t"
++        "str w1, [x2]\n\t"
++        "add x2, %[eventLoop], #%[kbaio_offset]\n\t"
++        "ldr x2, [x2]\n\t"
++        "add x3, x2, #%[specify_core_offset]\n\t"
++        "ldr w3, [x3]\n\t"
++        "cbz w3, 4f\n\t"
++        "orr w1, w1, #%[SQ_AFF]\n\t"
++        "str w1, [x0, #%[flags_offset]]\n\t"
++        "add x3, x2, #%[sq_thread_cpu_kbaio_offset]\n\t"
++        "ldr w3, [x3]\n\t"
++        "str w3, [x0, #%[sq_thread_cpu_offset]]\n\t"
++
++        "4:\n\t"
++        "mov x0, #%[max_entries]\n\t"
++        "ldr x11, [sp, 192]\n\t"
++        "add x1, %[state], #%[uring_offset]\n\t"
++        "ldr x1, [x1]\n\t"
++        "mov x2, %[params]\n\t"
++        "bl io_uring_queue_init_params\n\t"
++        "ldr x11, [sp, 192]\n\t"
++        "add x3, %[state], #%[ring_fd_offset]\n\t"
++        "str w0, [x3]\n\t"
++        "cmp w0, #-1\n\t"
++        "beq 5f\n\t"
++        "mov %w[ret], #0\n\t"
++        "b 0f\n\t"
++
++        "5:\n\t"
++        "add x0, %[state], #%[uring_offset]\n\t"
++        "ldr x0, [x0]\n\t"
++        "bl zfree\n\t"
++        "3:\n\t"
++        "add x0, %[state], #%[events_offset]\n\t"
++        "ldr x0, [x0]\n\t"
++        "bl zfree\n\t"
++        "2:\n\t"
++        "mov x0, %[state]\n\t"
++        "bl zfree\n\t"
++        "1:\n\t"
++        "mov %w[ret], #-1\n\t"
++        "0:\n\t"
++        : [ret] "=r" (ret), [state] "=&r" (state)
++        : [eventLoop] "r" (eventLoop),
++        [kbaio_offset] "i" (offsetof(aeEventLoop, kbaio)),
++        [events_offset] "i" (offsetof(aeApiState, events)),
++        [uring_offset] "i" (offsetof(aeApiState, uring)),
++        [ring_fd_offset] "i" (offsetof(aeApiState, ring_fd)),
++        [params] "r" (&params),
++        [size_params] "i" (sizeof(struct io_uring_params)),
++        [SQPOLL] "i" (IORING_SETUP_SQPOLL),
++        [SQ_AFF] "i" (IORING_SETUP_SQ_AFF),
++        [sqpoll_offset] "i" (offsetof(struct aeKbaioFlags, sqpoll)),
++        [specify_core_offset] "i" (offsetof(struct aeKbaioFlags, specify_core)),
++        [sq_thread_cpu_kbaio_offset] "i" (offsetof(struct aeKbaioFlags, sq_thread_cpu)),
++        [sq_thread_cpu_offset] "i" (offsetof(struct io_uring_params, sq_thread_cpu)),
++        [flags_offset] "i" (offsetof(struct io_uring_params, flags)),
++        [max_entries] "i" (MAX_ENTRIES)
++        : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x19", "memory"
++    );
++    if (ret == -1) return ret;
++    if (!(params.features & IORING_FEAT_FAST_POLL)) {
++        io_uring_queue_exit(state->uring);
++        zfree(state->uring);
++        zfree(state->events);
++        zfree(state);
++        return -1;
++    }
++    eventLoop->apidata = state;
++    if (enable_register_files) {
++        int *files = malloc(MAX_ENTRIES * sizeof(int));
++        if (!files) {
++            enable_register_files = 0;
++            return 0;
++        }
++        for (int i = 0; i < MAX_ENTRIES; i++)
++            files[i] = -1;
++        int retval = io_uring_register_files(state->uring, files, MAX_ENTRIES);
++        if (retval < 0) {
++            fprintf(stderr, "error register_files %d\n", ret);
++            enable_register_files = 0;
++        }
++    }
++    return ret;
++}
++
++int aeApiResize(aeEventLoop *eventLoop, int setsize) {
++    (void)eventLoop;
++    (void)setsize;
++    return 0;
++}
++
++void aeApiFree(aeEventLoop *eventLoop) {
++    aeApiState *state = eventLoop->apidata;
++
++    close(state->ring_fd);
++    zfree(state->events);
++    zfree(state->uring);
++    zfree(state);
++}
++
++int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask,
++                         struct iovec *iovecs) {
++    aeApiState *state = eventLoop->apidata;
++    struct io_uring_sqe *sqe = io_uring_get_sqe(state->uring);
++    if (!sqe) return -1;
++
++    /* NULL iovec means doing poll_add behavior */
++    if (!iovecs) {
++        unsigned int poll_mask = 0;
++        if (mask == AE_READABLE) poll_mask |= EPOLLIN;
++        if (mask == AE_WRITABLE) poll_mask |= EPOLLOUT;
++        io_uring_prep_poll_add(sqe, fd, poll_mask);
++    } else {
++        if (mask & AE_READABLE)
++            io_uring_prep_readv(sqe, fd, iovecs, 1, 0);
++        if (mask & AE_WRITABLE)
++            io_uring_prep_writev(sqe, fd, iovecs, 1, 0);
++    }
++
++    kbaio_event *ev = &state->events[fd];
++    ev->fd = fd;
++    ev->type = mask;
++    if (!iovecs) {
++        ev->type |= AE_POLLABLE;
++    }
++    if (enable_register_files) {
++        sqe->flags |= IOSQE_FIXED_FILE;
++    }
++
++    io_uring_sqe_set_data(sqe, (void *)ev);
++    return 0;
++}
++
++void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
++    (void)delmask;
++    aeApiState *state = eventLoop->apidata;
++    struct io_uring_sqe *sqe = io_uring_get_sqe(state->uring);
++    if (!sqe) {
++        exit(1);
++    }
++
++    kbaio_event *ev = &state->events[fd];
++    io_uring_prep_poll_remove(sqe, (void *)ev);
++}
++
++int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
++    aeApiState *state = eventLoop->apidata;
++    int retval, numevents = 0;
++
++    struct __kernel_timespec timeout = {
++        .tv_sec = tvp->tv_sec,
++        .tv_nsec = tvp->tv_usec * 1000,
++    };
++    struct io_uring_cqe *cqes_ptr;
++    retval = io_uring_submit_and_wait_timeout(state->uring, &cqes_ptr, 1, &timeout, NULL);
++    if (retval < 0) {
++        return numevents;
++    }
++
++    int cqe_count = io_uring_peek_batch_cqe(state->uring, cqes, BACKLOG);
++    /* go through all the cqe's */
++    for (int i = 0; i < cqe_count; ++i) {
++        int mask = 0;
++        struct io_uring_cqe *cqe = cqes[i];
++        kbaio_event *ev = io_uring_cqe_get_data(cqe);
++        if (!ev) {
++            io_uring_cqe_seen(state->uring, cqe);
++            continue;
++        }
++
++        if (ev->type & AE_POLLABLE) {
++            if (cqe->res < 0) {
++                io_uring_cqe_seen(state->uring, cqe);
++                continue;
++            }
++            if (cqe->res & EPOLLIN) mask |= AE_READABLE | AE_POLLABLE;
++            if (cqe->res & EPOLLOUT) mask |= AE_WRITABLE | AE_POLLABLE;
++            if (cqe->res & EPOLLERR) mask |= AE_WRITABLE | AE_READABLE | AE_POLLABLE;
++            if (cqe->res & EPOLLHUP) mask |= AE_WRITABLE | AE_READABLE | AE_POLLABLE;
++        } else {
++            eventLoop->events[ev->fd].res = cqe->res;
++            mask = ev->type;
++        }
++
++        eventLoop->fired[numevents].fd = ev->fd;
++        eventLoop->fired[numevents].mask = mask;
++
++        io_uring_cqe_seen(state->uring, cqe);
++        numevents++;
++    }
++
++    return numevents;
++}
++
++void aeApiRegisterFile(aeEventLoop *eventLoop, int fd) {
++    aeApiState *state = eventLoop->apidata;
++    if (enable_register_files) {
++        int ret;
++        void *uring = state->uring;
++        int tmp_fd = fd;
++
++        __asm__ volatile (
++            "mov x0, %[uring_ptr]\n\t"
++            "mov w1, %w[fd_val]\n\t"
++            "str w1, [sp, #-16]!\n\t"
++            "mov x2, sp\n\t"
++            "mov w3, #1\n\t"
++            "bl io_uring_register_files_update\n\t"
++            "add sp, sp, #16\n\t"
++            "mov %w[ret_val], w0\n\t"
++            : [ret_val] "=r" (ret)
++            : [uring_ptr] "r" (uring),
++              [fd_val] "r" (tmp_fd)
++            : "x0", "x1", "x2", "x3", "x30",
++              "memory", "cc"
++        );
++        if (ret < 0) {
++            fprintf(stderr, "lege io_uring_register_files_update failed: %d %d\n", fd, ret);
++            enable_register_files = 0;
++        }
++    }
++}
++
++char *aeApiName() {
++    return "kbaio";
++}
+\ No newline at end of file
+diff --git a/kbaio-src/src/networking_kbaio.c b/kbaio-src/src/networking_kbaio.c
+new file mode 100644
+index 00000000..3bdbbd01
+--- /dev/null
++++ b/kbaio-src/src/networking_kbaio.c
+@@ -0,0 +1,195 @@
++/*
++ * Copyright (c) Huawei Technilogies Co., Ltd. 2025-2025. All rights reserved.
++ */
++#include "networking_kbaio.h"
++
++
++void setCreateReadEventKbaio(int fd, void *privdata, aeFileProc *proc) {
++    client *c = (client *)privdata;
++    int readlen;
++    size_t qblen;
++    readlen = PROTO_IOBUF_LEN;
++    /* If this is a multi bulk request, and we are processing a bulk reply
++     * that is large enough, try to maximize the probability that the query
++     * buffer contains exactly the SDS string representing the object, even
++     * at the risk of requiring more read(2) calls. This way the function
++     * processMultiBulkBuffer() can avoid copying buffers to create the
++     * Redis Object representing the argument. */
++    if (c->reqtype == PROTO_REQ_MULTIBULK && c->multibulklen && c->bulklen != -1
++        && c->bulklen >= PROTO_MBULK_BIG_ARG)
++    {
++        ssize_t remaining = (size_t)(c->bulklen+2)-sdslen(c->querybuf);
++
++        if (remaining < readlen) readlen = remaining;
++    }
++
++    qblen = sdslen(c->querybuf);
++    if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
++    c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
++    c->riov.iov_len = readlen;
++    c->riov.iov_base = c->querybuf+qblen;
++    c->submitted_query++;
++    if (aeCreateFileEventWithBuf(server.el, fd, AE_READABLE, proc, c, &c->riov) == AE_ERR) {
++        serverPanic("Unrecoverable error creating file event.");
++    }
++}
++
++void readDoneFromClientKbaio(aeEventLoop *el, int fd, void *privdata, int mask) {
++    client *c = (client *)privdata;
++    int nread = el->events[fd].res;
++    if (nread < 0) {
++        if (errno == EAGAIN) {
++            return;
++        } else {
++            serverLog(LL_VERBOSE, "Reading from client: %s", strerror(errno));
++            freeClient(c);
++            return;
++        }
++    } else if (nread == 0) {
++        serverLog(LL_VERBOSE, "Client closed connection");
++        freeClient(c);
++        return;
++    } else if (c->flags & CLIENT_MASTER) {
++        /* Append the query buffer to the pending (not applied) buffer
++         * of the master. We'll use this buffer later in order to have a
++         * copy of the string applied by the last command executed. */
++        c->pending_querybuf = sdscatlen(c->pending_querybuf,
++                                        c->querybuf+c->qblen,nread);
++    }
++    sdsIncrLen(c->querybuf,nread);
++    c->lastinteraction = server.unixtime;
++    if (c->flags & CLIENT_MASTER) c->read_reploff += nread;
++    server.stat_net_input_bytes += nread;
++    if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
++        sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
++        bytes = sdscatrepr(bytes,c->querybuf,64);
++        serverLog(LL_WARNING,"Closing client that reached max query buffer length: %s (qbuf initial bytes: %s)", ci, bytes);
++        sdsfree(ci);
++        sdsfree(bytes);
++        freeClient(c);
++        return;
++    }
++    /* Time to process the buffer. If the client is a master we need to
++     * compute the difference between the applied offset before and after
++     * processing the buffer, to understand how much of the replication stream
++     * was actually applied to the master state: this quantity, and its
++     * corresponding part of the replication stream, will be propagated to
++     * the sub-slaves and to the replication backlog. */
++    if (!(c->flags & CLIENT_MASTER)) {
++        processInputBuffer(c);
++    } else {
++        size_t prev_offset = c->reploff;
++        processInputBuffer(c);
++        size_t applied = c->reploff - prev_offset;
++        if (applied) {
++            replicationFeedSlavesFromMasterStream(server.slaves,
++                    c->pending_querybuf, applied);
++            sdsrange(c->pending_querybuf, applied, -1);
++        }
++    }
++    c->submitted_query--;
++}
++
++void writeDoneToClientKbaio(aeEventLoop *el, int fd, void *privdata, int mask) {
++    UNUSED(mask);
++    client *c = (client *)privdata;
++    ssize_t nwritten = el->events[fd].res;
++    if (nwritten < 0) {
++        if (errno == EAGAIN) {
++            nwritten = 0;
++        } else {
++            serverLog(LL_VERBOSE,
++                "Error writing to client: %s", strerror(errno));
++            freeClient(c);
++            return;
++        }
++    }
++    if (nwritten <= 0) return;
++    c->sentlen += nwritten;
++    c->totwritten += nwritten;
++    size_t objlen;
++    sds o;
++    clientReplyBlock *o;
++    if (c->bufpos > 0) {
++        /* If the buffer was sent, set bufpos to zero to continue with
++         * the remainder of the reply. */
++        if ((int)c->sentlen == c->bufpos) {
++            c->bufpos = 0;
++            c->sentlen = 0;
++        }
++    } else if (c->reply->head != NULL) {
++        o = listNodeValue(listFirst(c->reply));
++        objlen = sdslen(o);
++        /* If we fully sent the object on head go to the next one */
++        if (c->sentlen == objlen) {
++            listDelNode(c->reply,listFirst(c->reply));
++            c->sentlen = 0;
++            c->reply_bytes -= o->size;
++            /* If there are no longer objects in the list, we expect
++             * the count of reply bytes to be exactly zero.  */
++            if (listLength(c->reply) == 0)
++                serverAssert(c->reply_bytes == 0);
++        }
++    }
++    /* Note that we avoid to send more than NET_MAX_WRITES_PER_EVENT
++     * bytes, in a single threaded server it's a good idea to serve
++     * other clients as well, even if a very large request comes from
++     * super fast link that is always able to accept data (in real world
++     * scenario think about 'KEYS *' against the loopback interface).
++     *
++     * However if we are over the maxmemory limit we ignore that and
++     * just deliver as much data as it is possible to deliver. 
++     * 
++     * Moreover, we also send as much as possible if the client is
++     * a slave or a monitor (otherwise, on high-speed traffic, the
++     * replication/output buffer will grow indefinitely) */
++    if (c->totwritten > NET_MAX_WRITES_PER_EVENT && (server.maxmemory == 0
++        || zmalloc_used_memory() < server.maxmemory) && !(c->flags & CLIENT_SLAVE))
++        return;
++    if (clientHasPendingReplies(c)) {
++        writeToClient(fd, c, 0);
++    } else {
++        server.stat_net_output_bytes += c->totwritten;
++        if (c->totwritten > 0) {
++            /* For clients representing masters we don't count sending data
++             * as an interaction, since we always send REPLCONF ACK commsnds
++             * that take some time to just fill the socket output buffer.
++             * We just rely on data / pings received for timeout detection. */
++             if (!(c->flags & CLIENT_MASTER)) c->lastinteraction = server.unixtime;
++        }
++        c->sentlen = 0;
++        c->totwritten = 0;
++        /* Close connection after entire reply has been sent. */
++        if (c->flags & CLIENT_CLOSE_AFTER_REPLY) {
++            freeClient(c);
++            return;
++        }
++        setCreateReadEventKbaio(fd, c, readDoneFromClientKbaio);
++    }
++}
++
++void writeToClientKbaio(client *c, int fd) {
++    size_t objlen;
++    sds o;
++    if (clientHasPendingReplies(c)) {
++        if (c->bufpos > 0) {
++            c->wiov.iov_len = c->bufpos-c->sentlen;
++            c->wiov.iov_base = c->buf+c->sentlen;
++        } else {
++            o = listNodeValue(listFirst(c->reply));
++            objlen = sdslen(o);
++            if (objlen == 0) {
++                listDelNode(c->reply,listFirst(c->reply));
++                return;
++            }
++            c->wiov.iov_len = objlen - c->sentlen;
++            c->wiov.iov_base = o + c->sentlen;
++        }
++
++        if (aeCreateFileEventWithBuf(server.el, fd, AE_WRITABLE,
++                                     writeDoneToClientKbaio, c, &(c->wiov)) == AE_ERR)
++        {
++            serverPanic("Unrecoverable error creating WRITABLE file event.");
++        }
++    }
++}
+
+
