@@ -7,6 +7,7 @@
 #
 # 用法: bash tools/verify.sh
 set -e
+set -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
