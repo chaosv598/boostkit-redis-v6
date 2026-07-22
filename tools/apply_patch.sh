@@ -129,6 +129,14 @@ for d in sorted(version_dir.iterdir()):
     if d.is_dir() and not d.name.startswith(".") and list(d.glob("*.patch")):
         if d.name not in seen: resolved.append(d.name); seen.add(d.name)
 
+# conflicts check
+feats = data.get("features") or {}
+if isinstance(feats, dict):
+    for f in resolved:
+        for c in (feats.get(f, {}).get("conflicts") or []):
+            if c in resolved:
+                sys.exit(f"冲突: {f} 和 {c} 不能同时激活，请用 --features 选择其一")
+
 total = 0; lines = [f"# Buildroot series from {manifest.name}", ""]
 for feat in resolved:
     for pf in sorted((version_dir / feat).glob("*.patch")):
