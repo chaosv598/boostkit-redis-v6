@@ -59,8 +59,7 @@ bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/bu
 ## 本地验证
 
 ```bash
-bash tools/verify.sh              # lint → clean apply，一条命令
-python3 tools/lint.py all src/*/  # 只跑 lint（秒级）
+bash tools/verify.sh
 ```
 
 ## 设计参考
