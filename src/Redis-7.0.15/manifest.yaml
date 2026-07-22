@@ -3,16 +3,26 @@
 #
 # 使用:
 #   bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
-#   bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/build
+#   bash tools/apply_patch.sh --features "kunpeng-iouring" src/Redis-7.0.15 /tmp/build
 #
 # Patch:
-#   kunpeng-hw-accel/  — ARM 硬件加速（io_uring + DTOE DMA）
-#   jemalloc-arm64/    — 内存分配器 ARM64 优化
+#   kunpeng-dtoe/    — DTOE DMA 网络路径优化
+#   kunpeng-iouring/ — io_uring ARM 适配
 #   rdb-aof-fallback/  — RDB 损坏降级 AOF
+#
+# 注意: dtoe 和 iouring 都改 redis.conf/src/Makefile，互斥，不能同时激活
 
 repo: https://github.com/redis/redis
 version: 7.0.15
 commit: f35f36a265403c07b119830aa4bb3b7d71653ec9
+
+features:
+  kunpeng-dtoe:
+    depends: []
+    conflicts: [kunpeng-iouring]
+  kunpeng-iouring:
+    depends: []
+    conflicts: [kunpeng-dtoe]
 
 install:
   configure: make distclean
