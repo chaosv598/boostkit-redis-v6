@@ -130,6 +130,5 @@ repo/version/commit 从 manifest.yaml 自动读取，不需要传参。`--featur
 
 | 校验项 | 命令 |
 |--------|------|
-| patch 头 6 必填 + 条件必填 | `python3 .github/lint.py headers src/*/` |
-| manifest schema + depends + conflicts + DEP-3 | `python3 .github/lint.py manifest src/*/` |
-| 结构 + clean apply | `bash tools/verify.sh` |
+| patch 头 + DEP-3 + manifest | `python3 tools/lint.py all src/*/` |
+| clean apply 验证 | `bash tools/verify.sh` |

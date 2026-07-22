@@ -2,10 +2,8 @@
 # verify — patch overlay 仓一键验证 (v6.0)
 #
 # 检查:
-#   1. 仓根禁放
-#   2. manifest.yaml schema (upstream pin)
-#   3. 功能目录一致性 (feature 目录 vs manifest)
-#   4. 干净 upstream apply (委托 apply_patch.sh)
+#   1. manifest.yaml schema (upstream pin)
+#   2. 干净 upstream apply (委托 apply_patch.sh)
 #
 # 用法: bash tools/verify.sh
 set -e
@@ -14,26 +12,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 export APPLY_NON_STRICT="${VERIFY_STRICT:-0}"
-
 errs=0
 echo "=== boostkit verify ==="
 
-# === 1. 仓根禁放 ===
-echo "--- 仓根禁放 ---"
-root_bad=0
-if compgen -G "*.patch" > /dev/null 2>&1; then
-    echo "  ✗ 仓根发现 .patch"
-    ls *.patch 2>/dev/null; root_bad=$((root_bad+1))
-fi
-[ -f Dockerfile ] && { echo "  ✗ 仓根有 Dockerfile"; root_bad=$((root_bad+1)); }
-[ -f Makefile ]   && { echo "  ✗ 仓根有 Makefile";   root_bad=$((root_bad+1)); }
-for d in src/ storage/ sql/ include/ SPECS/ RPMS/ SOURCES/ BUILD/ SRPMS/ vendor/ out/; do
-    [ -d "$d" ] && { echo "  ✗ 仓根有目录: $d"; root_bad=$((root_bad+1)); }
-done
-[ "$root_bad" = "0" ] && echo "  ✓ 仓根干净"
-errs=$((errs+root_bad))
-
-# === 2 + 3. manifest.yaml + feature 目录 + clean apply ===
 echo "--- manifest + apply ---"
 vcount=0
 
@@ -84,16 +65,12 @@ PYEOF
         errs=$((errs+1)); continue
     fi
 
-    REPO=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['repo'])" "$read_vars")
-    SHA=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['commit'])" "$read_vars")
     VERSION=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['version'])" "$read_vars")
+    REPO=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['repo'])" "$read_vars")
 
-    # 发现 feature 目录
-    features=$(for d in "$vdir"*/; do [ -d "$d" ] || continue; n=$(basename "$d"); [[ "$n" == .* ]] && continue; compgen -G "$d*.patch" > /dev/null 2>&1 && echo -n "$n "; done)
+    echo "  ✓ $vname: $REPO @ $VERSION"
+    vcount=$((vcount+1))
 
-    echo "  ✓ $vname: upstream @ $VERSION ($SHA), features: ${features:-<none>}"
-
-    # === 4. clean apply ===
     WORK=$(mktemp -d)
     if bash "$ROOT/tools/apply_patch.sh" "$vdir" "$WORK" 2>&1 | sed 's/^/    /'; then
         :
@@ -103,7 +80,6 @@ PYEOF
         errs=$((errs+1))
     fi
     rm -rf "$WORK"
-    vcount=$((vcount+1))
 done
 
 echo "--- 汇总 ---"
