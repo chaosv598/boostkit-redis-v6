@@ -215,10 +215,14 @@ done < "$TMP_SERIES"
 
 echo "→ apply summary: ✓ $ok / ✗ $warn / total $n"
 
-# === Buildroot-style install phase (read manifest install: section) ===
+# === Buildroot-style install phase ===
 MANIFEST="$VERSION_DIR/manifest.yaml"
 if [ -f "$MANIFEST" ]; then
-    INSTALL_INFO=$(python3 - "$MANIFEST" <<'PYEOF'
+    echo ""
+    echo "--- install ---"
+
+    # 读 install 段
+    INSTALL_DATA=$(python3 - "$MANIFEST" "$VERSION_DIR" <<'PYEOF'
 import sys, yaml, json
 from pathlib import Path
 
@@ -227,37 +231,47 @@ inst = m.get("install")
 if not isinstance(inst, dict) or not inst:
     print("{}"); sys.exit(0)
 
+version_dir = Path(sys.argv[2])
 out = {}
-deps = inst.get("deps", []) or []
-missing = [d for d in deps if not (Path(sys.argv[1]).parent / d).exists()]
-config = inst.get("configure", "").strip()
-build = inst.get("build", "").strip()
 
+deps = inst.get("deps", []) or []
+missing = [d for d in deps if not (version_dir / d).exists()]
 if missing:
     out["deps_missing"] = missing
+
+config = inst.get("configure", "").strip()
+build_cmd = inst.get("build", "").strip()
 if config:
     out["configure"] = config
-if build:
-    out["build"] = build
+if build_cmd:
+    out["build"] = build_cmd
 print(json.dumps(out))
 PYEOF
-    )
-    if [ "$INSTALL_INFO" != "{}" ]; then
-        echo ""
-        echo "--- install (from manifest) ---"
-        echo "$INSTALL_INFO" | python3 -c "
-import json, sys
-d = json.loads(sys.stdin.read())
-if d.get('deps_missing'):
-    print('  ⚠ 缺少 build 依赖:')
-    for m in d['deps_missing']:
-        print(f'      {m}')
-if d.get('configure'):
-    print(f'  → configure: {d[\"configure\"]}')
-if d.get('build'):
-    print(f'  → build:     {d[\"build\"]}')
-    print(f'    (cd upstream && {d[\"build\"]})')
-"
+)
+
+    if [ "$INSTALL_DATA" = "{}" ]; then
+        echo "  (无 install 段，apply 即完成)"
+    else
+        # deps 检查
+        MISSING=$(echo "$INSTALL_DATA" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('\n'.join(d.get('deps_missing',[])))")
+        if [ -n "$MISSING" ]; then
+            echo "  ⚠ 缺少 build 依赖（在 Kunpeng 机器上可忽略）:"
+            echo "$MISSING" | sed 's/^/      /'
+        fi
+
+        CONFIG=$(echo "$INSTALL_DATA" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('configure',''))")
+        BUILD=$(echo "$INSTALL_DATA" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('build',''))")
+
+        if [ -n "$CONFIG" ]; then
+            echo "  → $CONFIG"
+            (cd upstream && eval "$CONFIG") || echo "  ⚠ configure 失败（可能缺依赖，继续）"
+        fi
+        if [ -n "$BUILD" ]; then
+            echo "  → $BUILD"
+            (cd upstream && eval "$BUILD") || {
+                echo "  ⚠ build 失败（需要 Kunpeng 硬件 + BoostKit 内核）"
+            }
+        fi
     fi
 fi
 

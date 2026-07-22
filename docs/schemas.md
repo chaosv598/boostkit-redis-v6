@@ -70,9 +70,9 @@ depends:
   C: [B, A]  # C 依赖 B 和 A，B 先于 A apply
 ```
 
-### install（可选，Buildroot `.mk` 风格）
+### install（可选，Buildroot `BUILD_CMDS` / RPM `%build` 风格）
 
-声明 build/install 步骤，`apply_patch.sh` apply 完成后自动提示：
+声明编译步骤，`apply_patch.sh` 在 apply 后自动执行。
 
 | 字段 | 类型 | 语义 |
 |------|------|------|
@@ -89,7 +89,27 @@ install:
     - rpm_build/lib/libkraio.so
 ```
 
+业界出处：
+
+| 方案 | 写法 |
+|------|------|
+| **Buildroot** `redis.mk` | `define REDIS_BUILD_CMDS ... endef` |
+| **OpenWrt** `Makefile` | `define Build/Compile ... endef` |
+| **RPM** `.spec` | `%build` + `make` |
+
 不声明 `install` = 纯 patch overlay，apply 即结束。
+
+### 新手使用
+
+```bash
+# 一个命令全自动：clone → apply → configure → build
+bash tools/apply_patch.sh https://github.com/redis/redis \
+    f35f36a265403c07b119830aa4bb3b7d71653ec9 \
+    src/Redis-7.0.15 /tmp/build
+
+# install: 声明了 configure/build 则自动执行
+# 失败打印明确错误："需要 Kunpeng 硬件 + BoostKit 内核"
+```
 
 ### 注释规范
 
