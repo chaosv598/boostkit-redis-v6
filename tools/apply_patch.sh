@@ -6,11 +6,11 @@
 #   Linux Kconfig: depends 深度优先解析
 #
 # 用法:
-#   apply_patch.sh <version_dir> <work_dir>
+#   apply_patch.sh [--features "f1 f2"] <version_dir> <work_dir>
 #
-#   环境变量:
-#     ACTIVE_FEATURES="f1 f2"  只 apply 指定 feature 子集
-#     不设 = apply 全部 feature
+#   --features "f1 f2"  只 apply 指定 feature 子集
+#   不传 = apply 全部
+#   ACTIVE_FEATURES 环境变量也可用（CI 场景）
 #
 # repo/version/commit 从 version_dir/manifest.yaml 读取。
 
@@ -18,14 +18,33 @@ set -euo pipefail
 
 if [ $# -lt 2 ]; then
     cat >&2 <<'USAGE'
-Usage: apply_patch.sh <version_dir> <work_dir>
+Usage: apply_patch.sh [--features "f1 f2"] <version_dir> <work_dir>
 
 Examples:
   apply_patch.sh src/Redis-7.0.15 /tmp/build
-  ACTIVE_FEATURES="rdb-aof-fallback" apply_patch.sh src/Redis-7.0.15 /tmp/build
+  apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/build
 USAGE
     exit 2
 fi
+
+FEATURES_ARG="${ACTIVE_FEATURES:-}"
+
+# parse --features flag
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --features)
+            [ $# -ge 2 ] || { echo "✗ --features 需要参数" >&2; exit 2; }
+            FEATURES_ARG="$2"
+            shift 2
+            ;;
+        -*)
+            echo "✗ 未知选项: $1" >&2; exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 VERSION_DIR="$1"
 WORK="$2"
@@ -74,7 +93,7 @@ if [ ${#ALL_FEATURES[@]} -eq 0 ]; then
     echo "✗ 没有 feature (无 *.patch)" >&2; exit 2
 fi
 
-ACTIVE="${ACTIVE_FEATURES:-}"
+ACTIVE="$FEATURES_ARG"
 HAS_DEPENDS=$(echo "$MANIFEST_DATA" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); sys.exit(0 if isinstance(d.get('depends'),dict) and d['depends'] else 1)" 2>/dev/null && echo true || echo false)
 
 TMP_SERIES="$(mktemp)"

@@ -3,7 +3,7 @@
 #
 # 使用:
 #   bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
-#   ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
+#   bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/build
 #
 # Patch:
 #   kunpeng-hw-accel/  — ARM 硬件加速（io_uring + DTOE DMA）

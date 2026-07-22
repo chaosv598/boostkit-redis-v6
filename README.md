@@ -46,14 +46,14 @@ boostkit-redis-v6/
 
 ## 安装
 
-每个版本的 repo/version/commit 已写在 `manifest.yaml` 中，一个命令全自动：
+repo/version/commit 已写在 `manifest.yaml` 中。
 
 ```bash
-# clone → apply → configure → build
+# 全部 feature
 bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
 
-# 子集选择
-ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
+# 只选 rdb-aof-fallback
+bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/build
 ```
 
 产品文档（特性使用指南、版本配套说明）见 `docs/zh/` / `docs/en/`。

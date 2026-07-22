@@ -35,15 +35,14 @@ boostkit-redis-v6/
 
 ## Install
 
-repo/version/commit live in `manifest.yaml`. One command for the full lifecycle:
+repo/version/commit live in `manifest.yaml`.
 
 ```bash
-# clone → apply → configure → build
+# All features
 bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
 
 # Feature subset
-ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
-```
+bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/build
 
 Product documentation (feature guides, compatibility) in `docs/zh/` / `docs/en/`.
 
