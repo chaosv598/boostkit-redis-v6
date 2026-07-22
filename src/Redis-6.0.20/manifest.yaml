@@ -1,3 +1,20 @@
-﻿repo: https://github.com/redis/redis
+﻿# Redis 6.0.20 Patch Overlay
+# =========================
+#
+# 上游: https://github.com/redis/redis @ de0d963
+#
+# Feature:
+#   kunpeng-hw-accel/  — 鲲鹏 ARM io_uring 硬件加速
+#   kbaio/             — 鲲鹏 io_uring 异步 I/O 内核模块
+#
+# 构建依赖:
+#   deps/ — kbaio 内核模块源码
+#
+# 安装:
+#   bash tools/apply_patch.sh https://github.com/redis/redis \
+#       de0d9632b52849d9b7ea52408b1d681d771c5b46 \
+#       src/Redis-6.0.20 /tmp/build
+
+repo: https://github.com/redis/redis
 version: 6.0.20
 commit: de0d9632b52849d9b7ea52408b1d681d771c5b46

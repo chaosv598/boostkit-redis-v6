@@ -1,3 +1,16 @@
-﻿repo: https://github.com/redis/redis
+﻿# Redis 6.0.15 Patch Overlay
+# =========================
+#
+# 上游: https://github.com/redis/redis @ ada8941
+#
+# Feature:
+#   kunpeng-hw-accel/  — 鲲鹏 ARM io_uring 硬件加速
+#
+# 安装:
+#   bash tools/apply_patch.sh https://github.com/redis/redis \
+#       ada8941d467670b23bc98750e52c24b70d2bffa5 \
+#       src/Redis-6.0.15 /tmp/build
+
+repo: https://github.com/redis/redis
 version: 6.0.15
 commit: ada8941d467670b23bc98750e52c24b70d2bffa5
