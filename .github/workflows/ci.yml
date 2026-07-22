@@ -1,7 +1,7 @@
 # Patch overlay CI — v6.0
 #
-#   tools/lint.py all — manifest + DEP-3 + headers（秒级）
-#   apply 验证在本地 / Kunpeng runner 上跑: bash tools/verify.sh
+#   lint + apply（跳过 install，install 需 Kunpeng 硬件）
+#   本地全量: bash tools/verify.sh
 
 name: ci
 
@@ -23,10 +23,10 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install pyyaml
         run: pip install pyyaml --quiet
-      - name: Lint
-        run: python3 tools/lint.py all src/*/
+      - name: Verify (lint + apply, skip install)
+        run: SKIP_INSTALL=1 bash tools/verify.sh

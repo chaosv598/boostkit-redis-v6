@@ -47,8 +47,9 @@ Product documentation (feature guides, compatibility) in `docs/zh/` / `docs/en/`
 ## Verify
 
 ```bash
-bash tools/verify.sh           # lint + clean apply (needs network + Kunpeng HW)
-python3 tools/lint.py all src/*/  # lint only (fast, same as CI)
+bash tools/verify.sh                              # lint + apply + install
+python3 tools/lint.py all src/*/                  # lint only (fast, CI same)
+```
 
 ## Design
 

@@ -190,7 +190,11 @@ while IFS= read -r raw || [ -n "$raw" ]; do
 done < "$TMP_SERIES"
 echo "→ apply: ✓ $ok / ✗ $warn / total $n"
 
-# === install ===
+# === install (skip if SKIP_INSTALL=1) ===
+if [ "${SKIP_INSTALL:-0}" = "1" ]; then
+    echo ""
+    echo "--- install: 跳过 (SKIP_INSTALL=1)"
+else
 INSTALL_DATA=$(python3 - "$MANIFEST" "$VERSION_DIR" <<'PYEOF'
 import sys, yaml, json
 from pathlib import Path
@@ -217,5 +221,6 @@ if [ "$INSTALL_DATA" != "{}" ]; then
     BUILD=$(echo "$INSTALL_DATA" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('build',''))")
     [ -n "$CONFIG" ] && { echo "  → $CONFIG"; (cd upstream && eval "$CONFIG") || echo "  ⚠ configure 失败"; }
     [ -n "$BUILD" ] && { echo "  → $BUILD"; (cd upstream && eval "$BUILD") || echo "  ⚠ build 失败（可能需 Kunpeng 硬件）"; }
+fi
 fi
 exit 0
