@@ -1,11 +1,9 @@
-# Patch overlay CI — v6.0 Buildroot 精简模型
+# Patch overlay CI — v6.0
 #
 # 流程:
 #   1. tools/verify.sh   — 仓根禁放 + manifest schema + clean apply
-#   2. .github/lint.py manifest — manifest schema + DEP-3 必填
+#   2. .github/lint.py manifest — manifest + features + DEP-3
 #   3. .github/lint.py headers  — patch 头 schema
-#
-# v6.0: 砍掉 features 段 + depends + default，manifest 仅 3 字段，feature 自动发现
 
 name: ci
 
@@ -41,7 +39,7 @@ jobs:
         run: bash tools/verify.sh
 
       - name: Manifest + DEP-3 lint
-        run: python3 .github/lint.py manifest versions/*/
+        run: python3 .github/lint.py manifest src/*/
 
       - name: Patch header lint
-        run: python3 .github/lint.py headers versions/*/
+        run: python3 .github/lint.py headers src/*/

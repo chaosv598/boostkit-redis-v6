@@ -37,7 +37,7 @@ errs=$((errs+root_bad))
 echo "--- manifest + apply ---"
 vcount=0
 
-for vdir in versions/*/; do
+for vdir in src/*/; do
     [ -d "$vdir" ] || continue
     vname=$(basename "$vdir")
     manifest="$vdir/manifest.yaml"
