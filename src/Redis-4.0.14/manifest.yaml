@@ -8,7 +8,7 @@
 
 repo: https://github.com/redis/redis
 version: 4.0.14
-commit: b1c7c61a0aee6ded3c9d8519a2cf79981f31b6c9
+commit: 0090d4fbb59c96eebbd27cd575d18506e9ad77b6
 
 install:
   build: make -j$(nproc)
