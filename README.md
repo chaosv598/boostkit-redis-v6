@@ -34,10 +34,8 @@ boostkit-redis-v6/
 │       └── rpm_build/       # RPM spec + Kraio SDK
 ├── tools/
 │   ├── apply_patch.sh       # Buildroot 风格 patch 应用器
-│   └── verify.sh            # 一键验证
-├── .github/
-│   ├── lint.py              # patch 头 + manifest 校验
-│   └── workflows/ci.yml     # CI（3 步）
+│   ├── verify.sh            # 一键验证
+│   └── lint.py              # patch 头 + manifest 校验
 ├── docs/
 │   ├── schemas.md           # 治理：字段定义 + 校验矩阵
 │   ├── zh/                  # 产品文档：特性指南 + 版本说明书
@@ -61,9 +59,8 @@ bash tools/apply_patch.sh --features "rdb-aof-fallback" src/Redis-7.0.15 /tmp/bu
 ## 本地验证
 
 ```bash
-bash tools/verify.sh                                # 结构 + clean apply
-python3 .github/lint.py manifest src/*/              # manifest schema + DEP-3
-python3 .github/lint.py headers src/*/               # patch 头 schema
+python3 tools/lint.py all src/*/            # 快速 gate（秒级）
+bash tools/verify.sh                        # clean apply 验证
 ```
 
 ## 设计参考

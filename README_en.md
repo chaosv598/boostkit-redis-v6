@@ -23,10 +23,8 @@ boostkit-redis-v6/
 │   └── ... (3 more versions)
 ├── tools/
 │   ├── apply_patch.sh       # Buildroot-style patch applier
-│   └── verify.sh            # one-shot verification
-├── .github/
-│   ├── lint.py              # patch header + manifest validator
-│   └── workflows/ci.yml
+│   ├── verify.sh            # one-shot verification
+│   └── lint.py              # manifest + DEP-3 validator
 ├── docs/
 │   ├── schemas.md           # governance: field definitions
 │   ├── zh/                  # product docs: feature guides + release notes
@@ -49,9 +47,8 @@ Product documentation (feature guides, compatibility) in `docs/zh/` / `docs/en/`
 ## Verify
 
 ```bash
+python3 tools/lint.py all src/*/
 bash tools/verify.sh
-python3 .github/lint.py manifest src/*/
-python3 .github/lint.py headers src/*/
 ```
 
 ## Design
