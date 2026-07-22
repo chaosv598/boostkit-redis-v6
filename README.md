@@ -38,26 +38,27 @@ boostkit-redis-v6/
 ├── .github/
 │   ├── lint.py              # patch 头 + manifest 校验
 │   └── workflows/ci.yml     # CI（3 步）
-└── docs/
-    └── schemas.md           # 字段权威定义 + 校验矩阵
+├── docs/
+│   ├── schemas.md           # 治理：字段定义 + 校验矩阵
+│   ├── zh/                  # 产品文档：特性指南 + 版本说明书
+│   └── en/                  # 同上英文版
 ```
 
 ## 安装
 
-每个版本的安装步骤写在对应 `manifest.yaml` 注释中，直接看对应文件即可。
+每个版本的安装步骤在对应 `manifest.yaml` 中（Buildroot `.mk` / RPM `.spec` 风格），一个命令全自动：
 
 ```bash
-# 以 Redis-7.0.15 为例，manifest.yaml 注释里写了完整步骤:
-#   cat src/Redis-7.0.15/manifest.yaml
-
-# 一键 apply:
+# clone → patch → configure → build（manifest.yaml install: 声明则执行）
 bash tools/apply_patch.sh https://github.com/redis/redis \
     f35f36a265403c07b119830aa4bb3b7d71653ec9 \
     src/Redis-7.0.15 /tmp/build
 
-# 子集选择（只打 rdb-aof-fallback）:
+# 子集选择
 ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
 ```
+
+产品文档（特性使用指南、版本配套说明）见 `docs/zh/` / `docs/en/`。
 
 ## 本地验证
 

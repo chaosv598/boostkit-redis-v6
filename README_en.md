@@ -27,26 +27,27 @@ boostkit-redis-v6/
 ├── .github/
 │   ├── lint.py              # patch header + manifest validator
 │   └── workflows/ci.yml
-└── docs/
-    └── schemas.md           # field definitions + validation matrix
+├── docs/
+│   ├── schemas.md           # governance: field definitions
+│   ├── zh/                  # product docs: feature guides + release notes
+│   └── en/
 ```
 
 ## Install
 
-Install steps live in each version's `manifest.yaml` comments (Buildroot `.mk` / RPM `.spec` style).
+Install steps live in each version's `manifest.yaml` (Buildroot `.mk` / RPM `.spec` style). One command for the full lifecycle:
 
 ```bash
-# View install steps:
-cat src/Redis-7.0.15/manifest.yaml
-
-# Apply patches:
+# clone → patch → configure → build
 bash tools/apply_patch.sh https://github.com/redis/redis \
     f35f36a265403c07b119830aa4bb3b7d71653ec9 \
     src/Redis-7.0.15 /tmp/build
 
-# Feature subset:
+# Feature subset
 ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
 ```
+
+Product documentation (feature guides, compatibility) in `docs/zh/` / `docs/en/`.
 
 ## Verify
 
