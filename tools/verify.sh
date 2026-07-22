@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # verify — patch overlay 仓一键验证 (v6.0)
 #
-# 检查:
-#   1. manifest.yaml schema (upstream pin)
-#   2. 干净 upstream apply (委托 apply_patch.sh)
+# 执行:
+#   1. lint (manifest + DEP-3 + patch headers)
+#   2. clean apply (委托 apply_patch.sh)
 #
 # 用法: bash tools/verify.sh
 set -e
@@ -15,6 +15,12 @@ export APPLY_NON_STRICT="${VERIFY_STRICT:-0}"
 errs=0
 echo "=== boostkit verify ==="
 
+# === 0. lint gate ===
+echo "--- lint ---"
+python3 "$ROOT/tools/lint.py" all src/*/ || { echo "✗ lint 未通过"; exit 1; }
+
+# === manifest + apply ===
+echo ""
 echo "--- manifest + apply ---"
 vcount=0
 

@@ -47,8 +47,8 @@ Product documentation (feature guides, compatibility) in `docs/zh/` / `docs/en/`
 ## Verify
 
 ```bash
-python3 tools/lint.py all src/*/
-bash tools/verify.sh
+bash tools/verify.sh              # lint → clean apply
+python3 tools/lint.py all src/*/  # lint only (fast)
 ```
 
 ## Design

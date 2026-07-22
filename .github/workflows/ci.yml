@@ -1,8 +1,7 @@
 # Patch overlay CI — v6.0
 #
 # 流程:
-#   1. tools/lint.py all  — 快速 gate: manifest + DEP-3 + patch headers
-#   2. tools/verify.sh    — 结构 + clean apply
+#   tools/verify.sh  — lint (manifest + DEP-3 + headers) → clean apply
 
 name: ci
 
@@ -34,8 +33,5 @@ jobs:
       - name: Install pyyaml
         run: pip install pyyaml --quiet
 
-      - name: Lint (manifest + DEP-3 + headers)
-        run: python3 tools/lint.py all src/*/
-
-      - name: Verify (structure + clean apply)
+      - name: Verify (lint + apply)
         run: bash tools/verify.sh
