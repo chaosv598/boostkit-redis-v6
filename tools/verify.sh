@@ -95,7 +95,7 @@ PYEOF
 
     # === 4. clean apply ===
     WORK=$(mktemp -d)
-    if bash "$ROOT/tools/apply_patch.sh" "$REPO" "$SHA" "$vdir" "$WORK" 2>&1 | sed 's/^/    /'; then
+    if bash "$ROOT/tools/apply_patch.sh" "$vdir" "$WORK" 2>&1 | sed 's/^/    /'; then
         :
     else
         rc=$?

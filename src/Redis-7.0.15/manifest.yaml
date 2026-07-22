@@ -1,6 +1,10 @@
 ﻿# Redis 7.0.15 Kunpeng BoostKit
 # =============================
 #
+# 使用:
+#   bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
+#   ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
+#
 # Patch:
 #   kunpeng-hw-accel/  — ARM 硬件加速（io_uring + DTOE DMA）
 #   jemalloc-arm64/    — 内存分配器 ARM64 优化

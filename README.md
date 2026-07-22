@@ -46,16 +46,14 @@ boostkit-redis-v6/
 
 ## 安装
 
-每个版本的安装步骤在对应 `manifest.yaml` 中（Buildroot `.mk` / RPM `.spec` 风格），一个命令全自动：
+每个版本的 repo/version/commit 已写在 `manifest.yaml` 中，一个命令全自动：
 
 ```bash
-# clone → patch → configure → build（manifest.yaml install: 声明则执行）
-bash tools/apply_patch.sh https://github.com/redis/redis \
-    f35f36a265403c07b119830aa4bb3b7d71653ec9 \
-    src/Redis-7.0.15 /tmp/build
+# clone → apply → configure → build
+bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
 
 # 子集选择
-ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
+ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
 ```
 
 产品文档（特性使用指南、版本配套说明）见 `docs/zh/` / `docs/en/`。
