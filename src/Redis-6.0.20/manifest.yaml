@@ -4,22 +4,14 @@
 # Patch:
 #   kunpeng-hw-accel/  — ARM io_uring 硬件加速
 #   kbaio/             — io_uring 异步 I/O 内核模块
-#
-# Build 依赖:
-#   deps/kbaio-src/  — kbaio 内核模块源码 + liburing 静态库
-#
-# 安装:
-#   # 1. clone 上游 + apply patch
-#   bash tools/apply_patch.sh https://github.com/redis/redis \
-#       de0d9632b52849d9b7ea52408b1d681d771c5b46 \
-#       src/Redis-6.0.20 /tmp/build
-#   # 2. build
-#   cd /tmp/build/upstream
-#   make distclean && make -j$(nproc)
-#
-# 子集:
-#   ACTIVE_FEATURES="kbaio" bash tools/apply_patch.sh ...
 
 repo: https://github.com/redis/redis
 version: 6.0.20
 commit: de0d9632b52849d9b7ea52408b1d681d771c5b46
+
+install:
+  configure: make distclean
+  build: make -j$(nproc)
+  deps:
+    - deps/kbaio-src/include/ae_kbaio.h
+    - deps/kbaio-src/lib/liburing.a

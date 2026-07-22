@@ -3,13 +3,10 @@
 #
 # Patch:
 #   kunpeng-hw-accel/  — ARM io_uring 硬件加速
-#
-# 安装:
-#   bash tools/apply_patch.sh https://github.com/redis/redis \
-#       ada8941d467670b23bc98750e52c24b70d2bffa5 \
-#       src/Redis-6.0.15 /tmp/build
-#   cd /tmp/build/upstream && make -j$(nproc)
 
 repo: https://github.com/redis/redis
 version: 6.0.15
 commit: ada8941d467670b23bc98750e52c24b70d2bffa5
+
+install:
+  build: make -j$(nproc)

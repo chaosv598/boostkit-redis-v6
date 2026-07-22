@@ -70,7 +70,26 @@ depends:
   C: [B, A]  # C 依赖 B 和 A，B 先于 A apply
 ```
 
-列表顺序 = 依赖项之间的 apply 顺序。不声明则 feature 目录名字典序。
+### install（可选，Buildroot `.mk` 风格）
+
+声明 build/install 步骤，`apply_patch.sh` apply 完成后自动提示：
+
+| 字段 | 类型 | 语义 |
+|------|------|------|
+| `install.deps` | list[str] | build 依赖文件清单（相对版本目录） |
+| `install.configure` | string | configure 命令 |
+| `install.build` | string | build 命令 |
+
+```yaml
+install:
+  configure: make distclean
+  build: make -j$(nproc) USE_KRAIO=1
+  deps:
+    - rpm_build/include/kraio.h
+    - rpm_build/lib/libkraio.so
+```
+
+不声明 `install` = 纯 patch overlay，apply 即结束。
 
 ### 注释规范
 

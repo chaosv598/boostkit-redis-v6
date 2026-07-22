@@ -214,4 +214,51 @@ while IFS= read -r raw || [ -n "$raw" ]; do
 done < "$TMP_SERIES"
 
 echo "→ apply summary: ✓ $ok / ✗ $warn / total $n"
+
+# === Buildroot-style install phase (read manifest install: section) ===
+MANIFEST="$VERSION_DIR/manifest.yaml"
+if [ -f "$MANIFEST" ]; then
+    INSTALL_INFO=$(python3 - "$MANIFEST" <<'PYEOF'
+import sys, yaml, json
+from pathlib import Path
+
+m = yaml.safe_load(Path(sys.argv[1]).read_text())
+inst = m.get("install")
+if not isinstance(inst, dict) or not inst:
+    print("{}"); sys.exit(0)
+
+out = {}
+deps = inst.get("deps", []) or []
+missing = [d for d in deps if not (Path(sys.argv[1]).parent / d).exists()]
+config = inst.get("configure", "").strip()
+build = inst.get("build", "").strip()
+
+if missing:
+    out["deps_missing"] = missing
+if config:
+    out["configure"] = config
+if build:
+    out["build"] = build
+print(json.dumps(out))
+PYEOF
+    )
+    if [ "$INSTALL_INFO" != "{}" ]; then
+        echo ""
+        echo "--- install (from manifest) ---"
+        echo "$INSTALL_INFO" | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+if d.get('deps_missing'):
+    print('  ⚠ 缺少 build 依赖:')
+    for m in d['deps_missing']:
+        print(f'      {m}')
+if d.get('configure'):
+    print(f'  → configure: {d[\"configure\"]}')
+if d.get('build'):
+    print(f'  → build:     {d[\"build\"]}')
+    print(f'    (cd upstream && {d[\"build\"]})')
+"
+    fi
+fi
+
 exit 0
