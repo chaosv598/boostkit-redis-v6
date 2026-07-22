@@ -50,32 +50,45 @@ Pending / Submitted / Accepted / Rejected
 Backport / Inappropriate / Denied / Inactive-Upstream
 ```
 
-## 2. manifest.yaml
+## 2. manifest.yaml（Buildroot `.mk` / OpenWrt `Makefile` / RPM `.spec` 风格）
 
-### 必填字段
+一个文件 = 版本 pin + 构建安装说明。YAML 字段给脚本读，注释给人读。
 
-| 字段 | 类型 | 语义 |
-|------|------|------|
-| `repo` | URL | 上游 git URL |
-| `version` | string | upstream tag/version |
-| `commit` | 40-char SHA | immutable pin |
+### 字段
 
-### 可选字段
+| 字段 | 必填 | 类型 | 语义 |
+|------|------|------|------|
+| `repo` | 是 | URL | 上游 git URL |
+| `version` | 是 | string | upstream tag/version |
+| `commit` | 是 | 40-char SHA | immutable pin |
+| `depends` | 否 | dict | feature 间依赖（见下） |
 
-| 字段 | 类型 | 语义 |
-|------|------|------|
-| `depends` | dict | feature 间依赖（列表顺序 = 依赖项的 apply 顺序） |
-
-### 模板
+### depends（可选）
 
 ```yaml
-repo: https://github.com/redis/redis
-version: 7.0.15
-commit: f35f36a265403c07b119830aa4bb3b7d71653ec9
-
-# depends (可选):
-#   C: [B, A]  → B 先于 A，都在 C 之前
+depends:
+  C: [B, A]  # C 依赖 B 和 A，B 先于 A apply
 ```
+
+列表顺序 = 依赖项之间的 apply 顺序。不声明则 feature 目录名字典序。
+
+### 注释规范
+
+YAML 注释 = 给人读的文档，约定 # 后必备三段：
+
+```yaml
+# Feature: <描述每个含 .patch 的子目录>
+# Build 依赖: <deps/, rpm_build/ 等非 patch 目录说明>
+# 安装: <clone + apply + build 完整步骤>
+```
+
+业界出处：
+
+| 方案 | 文件 | 模式 |
+|------|------|------|
+| **Buildroot** | `package/redis/redis.mk` | `REDIS_VERSION` + 构建命令，同一文件 |
+| **OpenWrt** | `package/dnsmasq/Makefile` | `PKG_VERSION` + `define Build/Compile` |
+| **RPM** | `redis.spec` | `Version:` + `%build` script |
 
 ## 3. 校验矩阵
 

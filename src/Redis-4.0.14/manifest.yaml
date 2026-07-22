@@ -1,18 +1,17 @@
-﻿# Redis 4.0.14 Patch Overlay
-# =========================
+﻿# Redis 4.0.14 Kunpeng BoostKit
+# =============================
 #
-# 上游: https://github.com/redis/redis @ b1c7c61
+# Patch:
+#   kbaio/  — io_uring 异步 I/O 内核模块
 #
-# Feature:
-#   kbaio/  — 鲲鹏 io_uring 异步 I/O 内核模块
+# Build 依赖:
+#   deps/kbaio-src/  — kbaio 内核模块源码
 #
 # 安装:
 #   bash tools/apply_patch.sh https://github.com/redis/redis \
 #       b1c7c61a0aee6ded3c9d8519a2cf79981f31b6c9 \
 #       src/Redis-4.0.14 /tmp/build
-#
-# 子集选择:
-#   ACTIVE_FEATURES="kbaio" bash tools/apply_patch.sh ...
+#   cd /tmp/build/upstream && make -j$(nproc)
 
 repo: https://github.com/redis/redis
 version: 4.0.14

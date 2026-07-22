@@ -1,20 +1,24 @@
-﻿# Redis 7.0.15 Patch Overlay
-# =========================
+﻿# Redis 7.0.15 Kunpeng BoostKit
+# =============================
 #
-# 上游: https://github.com/redis/redis @ f35f36a
+# Patch（含 .patch 的子目录即 feature）:
+#   kunpeng-hw-accel/  — ARM 硬件加速（io_uring + DTOE DMA）
+#   jemalloc-arm64/    — 内存分配器 ARM64 优化
+#   rdb-aof-fallback/  — RDB 损坏降级 AOF
 #
-# Feature:
-#   kunpeng-hw-accel/  — 鲲鹏 ARM 硬件加速（io_uring + DTOE DMA 网络路径）
-#   jemalloc-arm64/    — jemalloc ARM64 pointer-tag + GC decay 策略优化
-#   rdb-aof-fallback/  — RDB 损坏时降级到 AOF，避免硬停服
+# Build 依赖:
+#   rpm_build/  — Kraio SDK (kraio.h / libkraio.so) + RPM spec
 #
-# 构建依赖:
-#   rpm_build/ — RPM 打包 spec + Kraio SDK 头文件（kraio.h / libkraio.so）
-#
-# 安装（全量）:
+# 安装:
+#   # 1. clone 上游 + apply patch
 #   bash tools/apply_patch.sh https://github.com/redis/redis \
 #       f35f36a265403c07b119830aa4bb3b7d71653ec9 \
 #       src/Redis-7.0.15 /tmp/build
+#   # 2. build（需 Kunpeng 硬件 + BoostKit 内核）
+#   cd /tmp/build/upstream
+#   make distclean && make -j$(nproc) USE_KRAIO=1
+#   # 3. RPM 打包
+#   bash src/Redis-7.0.15/rpm_build/packaging_scripts/sourcesBuild.sh
 #
 # 子集:
 #   ACTIVE_FEATURES="rdb-aof-fallback" bash tools/apply_patch.sh ...
