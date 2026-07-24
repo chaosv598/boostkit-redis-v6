@@ -47,6 +47,45 @@ MIN_DESCRIPTION_LEN = 20
 HEADER_END_RE = re.compile(r"^(diff --git |--- |\+\+\+ )", re.MULTILINE)
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# ─── manifest features.<name> 6 态治理字段（Yocto 总分形态） ───
+VALID_MANIFEST_STATUSES = frozenset({
+    "Pending",       # 已发上游 PR/邮件, 等回复
+    "Submitted",     # 上游复核中
+    "Backport",      # 从更高版本反向移植
+    "Denied",        # 上游明确拒绝
+    "Inappropriate", # 不适合上游（白名单）
+    "Accepted",      # 上游已合并
+})
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# status 状态转换合法性（防止 Inappropriate→Accepted 跳变）
+STATUS_TRANSITIONS = {
+    "Draft":        {"Pending", "Obsolete"},          # 仅迁移历史时用
+    "Pending":      {"Submitted", "Backport", "Denied", "Inappropriate", "Obsolete"},
+    "Submitted":    {"Pending", "Accepted", "Backport", "Denied", "Inappropriate", "Obsolete"},
+    "Backport":     {"Accepted", "Obsolete"},
+    "Denied":       {"Pending", "Obsolete"},          # 可重新发起
+    "Inappropriate": {"Obsolete"},                    # 不可转为 Accepted
+    "Accepted":     {"Obsolete"},
+    "Obsolete":     set(),
+}
+
+# status → notes / upstream_metadata 字段联动
+MANIFEST_STATUS_REQUIRES_NOTES = frozenset({
+    "Inappropriate",  # 必填：不适合上游原因
+    "Denied",         # 必填：上游拒绝原因
+    "Backport",       # 必填：源头 commit 或新版本号
+})
+MANIFEST_STATUS_REQUIRES_COMMIT = frozenset({
+    "Accepted",       # 必填：上游 commit hash
+})
+MANIFEST_STATUS_REQUIRES_PR = frozenset({
+    "Pending",        # 必填：已发的 PR / 邮件列表链接
+    "Submitted",
+})
+MIN_MANIFEST_NOTES_LEN = 10
+
 
 def parse_header(text: str) -> tuple[dict[str, str], str]:
     headers: dict[str, str] = {}
@@ -300,6 +339,33 @@ def lint_manifest(manifest_yaml: Path) -> list[str]:
             if not dep_path.exists():
                 errs.append(f"{manifest_yaml}: install.deps: {dep} 不存在")
 
+    # ─── v6.0 总分形态：features.<name> 治理字段校验 ───
+    features = data.get("features")
+    if isinstance(features, dict):
+        for fname, fg in features.items():
+            if not isinstance(fg, dict):
+                continue
+            errs.extend(_lint_feature_governance(fname, fg, manifest_yaml))
+
+        # 校验 patch header Upstream-Status 与 manifest status 一致性（数据防漂移）
+        for fname in feature_names:
+            fg = features.get(fname, {})
+            if not isinstance(fg, dict):
+                continue
+            mf_status = fg.get("status", "").strip()
+            for pf in sorted((version_dir / fname).glob("*.patch")):
+                try:
+                    text = pf.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                hdr = parse_header_minimal(text)
+                ph_status = hdr.get("Upstream-Status", "").strip()
+                if ph_status and mf_status and ph_status != mf_status:
+                    errs.append(
+                        f"{manifest_yaml}: features.{fname}.status={mf_status!r} "
+                        f"与 {pf}: Upstream-Status={ph_status!r} 不一致"
+                    )
+
     return errs
 
 
@@ -316,6 +382,70 @@ def cmd_manifest(targets: list[Path]) -> int:
 
     print(f"\n--- manifest: {len(targets)} 个, {len(all_errs)} 个错误 ---")
     return 0 if not all_errs else 1
+
+
+# === manifest features.<name> 6 态治理字段校验（Yocto 总分形态） ===
+
+def _lint_feature_governance(name: str, fg: dict, manifest_yaml: Path) -> list[str]:
+    errs: list[str] = []
+
+    def _s(v) -> str:
+        """Normalize value to stripped string (PyYAML parses YYYY-MM-DD as date)."""
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    # ── owner: email 格式 ──
+    owner = _s(fg.get("owner"))
+    if not owner:
+        errs.append(f"{manifest_yaml}: features.{name}: 缺 owner 字段")
+    elif not EMAIL_RE.match(owner):
+        errs.append(f"{manifest_yaml}: features.{name}: owner={owner!r} 不是 email 格式")
+
+    # ── date: YYYY-MM-DD 或 unknown ──
+    date = _s(fg.get("date"))
+    if not date:
+        errs.append(f"{manifest_yaml}: features.{name}: 缺 date 字段 (YYYY-MM-DD 或 'unknown')")
+    elif date != "unknown" and not DATE_RE.match(date):
+        errs.append(f"{manifest_yaml}: features.{name}: date={date!r} 不是 YYYY-MM-DD")
+
+    # ── status: 6 选 1 ──
+    status = _s(fg.get("status"))
+    if not status:
+        errs.append(f"{manifest_yaml}: features.{name}: 缺 status 字段 (Yocto 6 态)")
+    elif status not in VALID_MANIFEST_STATUSES:
+        errs.append(
+            f"{manifest_yaml}: features.{name}: status={status!r} 非法;"
+            f"允许: {', '.join(sorted(VALID_MANIFEST_STATUSES))}"
+        )
+
+    # ── notes: 必填/选填依 status 而定 ──
+    notes = _s(fg.get("notes"))
+    if status in MANIFEST_STATUS_REQUIRES_NOTES and len(notes) < MIN_MANIFEST_NOTES_LEN:
+        errs.append(
+            f"{manifest_yaml}: features.{name}: status={status} → notes 必填且 ≥{MIN_MANIFEST_NOTES_LEN} 字符"
+            f"(当前 {len(notes)} 字符)"
+        )
+
+    # ── upstream_commit / upstream_pr: 联动必填 ──
+    upstream_commit = _s(fg.get("upstream_commit"))
+    upstream_pr = _s(fg.get("upstream_pr"))
+
+    if status in MANIFEST_STATUS_REQUIRES_COMMIT:
+        if not upstream_commit:
+            errs.append(f"{manifest_yaml}: features.{name}: status={status} → upstream_commit 必填")
+        elif not SHA_RE.fullmatch(upstream_commit):
+            errs.append(
+                f"{manifest_yaml}: features.{name}: upstream_commit={upstream_commit!r} 不是 40-char SHA"
+            )
+
+    if status in MANIFEST_STATUS_REQUIRES_PR:
+        if not upstream_pr:
+            errs.append(f"{manifest_yaml}: features.{name}: status={status} → upstream_pr 必填")
+        elif not (upstream_pr.startswith("http://") or upstream_pr.startswith("https://") or upstream_pr.startswith("git://")):
+            errs.append(f"{manifest_yaml}: features.{name}: upstream_pr={upstream_pr!r} 不是 URL")
+
+    return errs
 
 
 # === subcommand: all ===

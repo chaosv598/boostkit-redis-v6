@@ -1,4 +1,4 @@
-﻿# Redis 7.0.15 Kunpeng BoostKit
+# Redis 7.0.15 Kunpeng BoostKit
 # =============================
 #
 # v6.0 manifest 形态: 总 + 分
@@ -42,8 +42,8 @@ features:
   rdb-aof-fallback:
     owner: twwang1@qq.com
     date: 2026-07-13
-    status: Pending
-    notes: "grisu2 d2string + addReplyDouble 性能修复, 已发 redis-dev 邮件列表, 待 upstream 评审"
+    status: Inappropriate
+    notes: "grisu2 double-to-string 性能修复, 涉及 Redis 内部数值序列化格式, 上游维护者倾向保守不接此类优化"
     depends: []
     conflicts: []
 
