@@ -1,14 +1,22 @@
 ﻿# Redis 4.0.14 Kunpeng BoostKit
 # =============================
 #
-# 使用: bash tools/apply_patch.sh src/Redis-4.0.14 /tmp/build
-#
-# Patch:
-#   kbaio/  — io_uring 异步 I/O 内核模块
+# v6.0 manifest 形态: 总 + 分
+#   总: 上游身份
+#   分: features.X 包含 owner / 提交日期 / status / 备注
+#   status 取值 (Yocto Upstream-Status 6 态):
+#     Pending / Submitted / Backport / Denied / Inappropriate / Accepted
 
 repo: https://github.com/redis/redis
 version: 4.0.14
 commit: 0090d4fbb59c96eebbd27cd575d18506e9ad77b6
+
+features:
+  kbaio:
+    owner: twwang@qq.com
+    date: unknown
+    status: Inappropriate
+    notes: "Kunpeng BoostKit io_uring async I/O 内核模块, ARM 专用, 上游 Redis 4.x 已 EOL 不再合入"
 
 install:
   build: make -j$(nproc)

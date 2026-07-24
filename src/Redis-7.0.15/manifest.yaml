@@ -1,16 +1,22 @@
 ﻿# Redis 7.0.15 Kunpeng BoostKit
 # =============================
 #
+# v6.0 manifest 形态: 总 + 分
+#   总 (top-level): 上游身份 (repo/version/commit/install)
+#   分 (features): 每个 patch 对应一项，含 owner / 提交日期 / status / 备注
+#   status 取值 (Yocto Upstream-Status 6 态):
+#     Pending      已发上游 PR/邮件,等回复
+#     Submitted    已发,复核过程中
+#     Backport     从更高版本反向移植
+#     Denied       上游明确拒绝
+#     Inappropriate (本仓全量使用) 不适合上游,需备注原因
+#     Accepted     上游已合并
+#
 # 使用:
 #   bash tools/apply_patch.sh src/Redis-7.0.15 /tmp/build
 #   bash tools/apply_patch.sh --features "kunpeng-iouring" src/Redis-7.0.15 /tmp/build
 #
-# Patch:
-#   kunpeng-dtoe/    — DTOE DMA 网络路径优化
-#   kunpeng-iouring/ — io_uring ARM 适配
-#   rdb-aof-fallback/  — RDB 损坏降级 AOF
-#
-# 注意: dtoe 和 iouring 都改 redis.conf/src/Makefile，互斥，不能同时激活
+# 注意: kunpeng-dtoe 和 kunpeng-iouring 都改 redis.conf/src/Makefile,互斥
 
 repo: https://github.com/redis/redis
 version: 7.0.15
@@ -18,11 +24,28 @@ commit: f35f36a265403c07b119830aa4bb3b7d71653ec9
 
 features:
   kunpeng-dtoe:
+    owner: twwang1@qq.com
+    date: 2026-03-16
+    status: Inappropriate
+    notes: "Kunpeng ARM DTOE DMA 网络路径, 依赖硬件特定驱动, 上游 Redis 不接受"
     depends: []
     conflicts: [kunpeng-iouring]
+
   kunpeng-iouring:
+    owner: twwang@qq.com
+    date: 2025-11-20
+    status: Inappropriate
+    notes: "Kunpeng ARM io_uring 适配, 等待 liburing-aio 接口上游稳定后再推"
     depends: []
     conflicts: [kunpeng-dtoe]
+
+  rdb-aof-fallback:
+    owner: twwang1@qq.com
+    date: 2026-07-13
+    status: Pending
+    notes: "grisu2 d2string + addReplyDouble 性能修复, 已发 redis-dev 邮件列表, 待 upstream 评审"
+    depends: []
+    conflicts: []
 
 install:
   configure: make distclean

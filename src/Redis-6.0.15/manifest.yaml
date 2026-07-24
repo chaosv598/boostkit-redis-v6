@@ -1,14 +1,22 @@
 ﻿# Redis 6.0.15 Kunpeng BoostKit
 # =============================
 #
-# 使用: bash tools/apply_patch.sh src/Redis-6.0.15 /tmp/build
-#
-# Patch:
-#   kunpeng-hw-accel/  — ARM io_uring 硬件加速
+# v6.0 manifest 形态: 总 + 分
+#   总: 上游身份
+#   分: features.X 包含 owner / 提交日期 / status / 备注
+#   status 取值 (Yocto Upstream-Status 6 态):
+#     Pending / Submitted / Backport / Denied / Inappropriate / Accepted
 
 repo: https://github.com/redis/redis
 version: 6.0.15
 commit: e0cf85b8484d0985cdd80fc295e4963ab3970877
+
+features:
+  kunpeng-hw-accel:
+    owner: huyizhen@163.com
+    date: 2026-02-24
+    status: Inappropriate
+    notes: "Kunpeng ARM io_uring 硬件加速, ARM SoC 专用, 与 Redis 上游 x86 主线目标不符"
 
 install:
   build: make -j$(nproc)

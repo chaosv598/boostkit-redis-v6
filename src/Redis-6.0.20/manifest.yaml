@@ -1,11 +1,11 @@
 ﻿# Redis 6.0.20 Kunpeng BoostKit
 # =============================
 #
-# 使用: bash tools/apply_patch.sh src/Redis-6.0.20 /tmp/build
-#
-# Patch（同名序号 = 互斥，不能同时选）:
-#   kunpeng-hw-accel/  — ARM io_uring 硬件加速
-#   kbaio/             — io_uring 异步 I/O 内核模块
+# v6.0 manifest 形态: 总 + 分
+#   总: 上游身份 (repo/version/commit/install)
+#   分: 每个 patch 对应 features 一项,含 owner / 提交日期 / status / 备注
+#   status 取值 (Yocto Upstream-Status 6 态):
+#     Pending / Submitted / Backport / Denied / Inappropriate / Accepted
 
 repo: https://github.com/redis/redis
 version: 6.0.20
@@ -13,11 +13,18 @@ commit: de0d9632b52849d9b7ea52408b1d681d771c5b46
 
 features:
   kunpeng-hw-accel:
+    owner: huyizhen@163.com
+    date: 2026-02-24
+    status: Inappropriate
+    notes: "Kunpeng ARM io_uring 硬件加速, 依赖 ARM SoC + KRAIO, 上游 Redis 不接受硬件特定优化"
     depends: []
     conflicts: [kbaio]
+
   kbaio:
-    depends: []
-    conflicts: [kunpeng-hw-accel]
+    owner: twwang@qq.com
+    date: unknown
+    status: Inappropriate
+    notes: "Kunpeng BoostKit io_uring async I/O 内核模块, ARM 专用, 上游 Redis 目标 x86 不适用"
 
 install:
   configure: make distclean
